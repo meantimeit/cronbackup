@@ -1,0 +1,75 @@
+#!/usr/bin/perl
+
+
+=head1
+
+Copyright 2015 Paul Connolley (connrs)
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+=cut
+
+use warnings;
+use strict;
+
+## WARNING: type 'chmod 0600 /etc/cronbackup' ##
+#file must contain 'username:host:systemuser'
+#one entry per line.
+my $cronbackup_conf = '/etc/cronbackup';
+
+main();
+
+sub main
+{
+	#check mode of $cronbackup_conf file
+	my ($mode) = (stat($cronbackup_conf))[2];
+	$mode = sprintf "%04o", $mode & 07777;
+
+	unless (-o $cronbackup_conf && $mode eq '0600')
+	{
+		die "Please secure '$cronbackup_conf' file. Type 'chmod 0600 $cronbackup_conf'.\n";
+	}
+
+	#read in passwords from file
+	read_conf();
+}
+
+sub read_conf
+{
+	open(CONF, $cronbackup_conf) or die "$!";
+
+	while(<CONF>)
+	{
+		chomp;
+		my ($user, $host, $systemuser) = split(/:/);
+
+		if ($user =~ /^\s*#/) { next; }
+
+		print "Cron Backup: ". $host ."\n";
+		print "========================================================\n\n";
+		#retrieve databases with this user's privileges
+		process_server($user, $host, $systemuser);
+		print "\n\n";
+	}
+
+	close(CONF);
+}
+
+sub process_server
+{
+  my ($user, $host, $systemuser) = @_;
+  my $filename = "$host-$systemuser";
+  my $backup_cmd = "ssh $user\@$host \"sudo crontab -l -u $systemuser\" > $filename";
+  print "Backing up crontab from $host for $systemuser\n";
+  system($backup_cmd) == 0 or die "$!";
+}
